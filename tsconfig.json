@@ -1,0 +1,23 @@
+{
+    "version": "1.5.0-alpha",
+    "compilerOptions": {
+        "target": "es5",
+        "module": "commonjs",
+        "declaration": false,
+        "noImplicitAny": false,
+        "removeComments": true,
+        "out": "./build/waspioc.js",
+        "noLib": false,
+        "preserveConstEnums": true,
+        "suppressImplicitAnyIndexErrors": true
+    },
+    "filesGlob": [
+        "./**/*.ts",
+        "!./node_modules/**/*.ts"
+    ],
+    "files": [
+        "./core/ioc/configurationItem.ts",
+        "./core/ioc/serviceContext.ts",
+        "./core/models/treenode.ts"
+    ]
+}

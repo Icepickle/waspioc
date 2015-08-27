@@ -1,0 +1,37 @@
+body { background-color: #888888; }
+div.screen {
+  background-color: silver;
+  box-shadow: #333333 2px 2px;
+}
+div.header {
+  background-color: darkblue;
+}
+div.header h1 {
+  color: #fff;
+}
+div.left-pane {
+  background-color: #cfcfcf;
+  text-align: left;
+}
+div.resource-pane, div.structure-pane, div.property-pane {
+  border: inset #888888 1px;
+  padding: 5px;
+  text-align: left;
+  background-color: #efefef;
+}
+div.content-pane {
+  border: inset 1px;
+  background-color: #efefef;
+}
+div.output-pane {
+  border: inset 1px;
+  background-color: #dfdfdf;
+}
+div.menu {
+  background-color: #cfcfcf;
+}
+div.toolbar {
+  border-top: solid #efefef 1px;
+  border-bottom: solid #666666 1px;
+  background-color: #dfdfdf;
+}

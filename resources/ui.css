@@ -1,0 +1,94 @@
+html, body {
+  font-family: 'Verdana';
+  font-size: .9em;
+  padding: 0; margin: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+a, a:visited {
+  color: #2555aa;
+  text-decoration: none;
+}
+a:active {
+  color: #aa2555;
+}
+a:over {
+  text-decoration: underline;
+}
+div.screen {
+  position: absolute;
+  display: block;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  top: 5px;
+  margin: 0;
+  padding: 0;
+  border: outset 1px;
+}
+div.header {
+  position: absolute;
+  left: 0; right: 0; top: 0; height: 30px;
+  border-bottom: solid silver 1px;
+  vertical-align: middle;
+}
+div.menu {
+  position: absolute;
+  left: 0; right: 0; top: 31px; height: 20px;
+}
+div.toolbar {
+  position: absolute;
+  top: 51px;
+  height: 36px;
+  left: 0;
+  right: 0;
+}
+div.left-pane {
+  position: absolute;
+  left: 0px;
+  width: 240px;
+  bottom: 30px;
+  top: 91px;
+  background-color: #efefef;
+}
+div.resource-pane {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  top: 0px;
+  height: 32%;
+  overflow: auto;
+}
+div.structure-pane {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  top: 33%;
+  height: 32%;
+  overflow: auto;
+}
+div.property-pane {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  top: 66%;
+  bottom: 0px;
+  overflow: auto;
+}
+div.content-pane {
+  position: absolute;
+  left: 245px;
+  top: 91px;
+  right: 0px;
+  bottom: 230px;
+  overflow: auto;
+}
+div.output-pane {
+  position: absolute;
+  left: 245px;
+  bottom: 30px;
+  height: 200px;
+  right: 0px;
+  overflow: auto;
+}
