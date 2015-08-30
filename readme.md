@@ -34,19 +34,20 @@ Use the loading event of your library to register the modules required for your 
 Below is a small unit test for the waspioc library
 
 ####add the library####
-````
+````html
 <script type="text/javascript" src="./build/waspioc.js"></script>
 ````
 
 ####add a script block or external js#####
 Attach to the onload event of the window or with jQuery way
 
-````
+````javascript
 $(function() { ... })
 ````
 
 
-````window.addEventListener('load', function() {
+````javascript
+window.addEventListener('load', function() {
       var context = waspioc.core.ioc.ServiceContext.getCurrentContext();
 
       function TestModule() {
@@ -109,4 +110,11 @@ $(function() { ... })
       // start the context
       context.start();
     });
+````
+
+####Watch the console and see the following output####
+
+````
+instance bean matches bean property? yes
+same bean names = same instance? yes
 ````
