@@ -147,11 +147,13 @@ var waspioc;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerModule = function (name, module) {
+                    this.ensureState(ServiceContextState.INIT);
                     this.registerBean(name, module);
                     this.moduleDictionary[name] = new ioc.ConfigurationItem(name, module, this, true);
                 };
                 ServiceContext.prototype.remove = function (name) {
                     var success = false;
+                    var oldItem = this.getItem(name);
                     if (this.instanceDictionary[name] !== undefined) {
                         delete this.instanceDictionary[name];
                         success = true;
@@ -164,6 +166,12 @@ var waspioc;
                         delete this.propertyDictionary[name];
                         success = true;
                     }
+                    if (this.lifeCycleDictionary.onDisposed[name] !== undefined) {
+                        if (oldItem.onDisposed) {
+                            oldItem.onDisposed();
+                        }
+                    }
+                    oldItem = null;
                     return success;
                 };
                 ServiceContext.prototype.dispose = function () {
