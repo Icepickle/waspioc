@@ -98,9 +98,14 @@ window.addEventListener('load', function() {
           context.register('unit_test_context', UT_ContextInitiated);
           // register context
           context.registerInstance('singleItem', item);
-          context.register('item', item.constructor).value('test', 'A').reference('complex', 'singleItem');
-          context.register('viewModel', ViewModel).reference('item', 'item');
+          // use fluid typing to configure properties on a class or to inject properties or constructor arguments
+          context.register('item', item.constructor)
+                 .value('test', 'A')
+                 .reference('complex', 'singleItem');
+          context.register('viewModel', ViewModel)
+                 .reference('item', 'item');
 
+          // if a new class defines these properties they will be set to the corresponding values (instance)
           context.registerProperty('logger', console);
           context.registerProperty('serviceContext', context);
         }
