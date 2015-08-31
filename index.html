@@ -8,7 +8,63 @@
   <script type="text/javascript" src="./build/waspioc.js"></script>
   <script type="text/javascript">
     window.addEventListener('load', function() {
-      var context = waspioc.core.ioc.ServiceContext.getCurrentContext();
+      var ioc = waspioc.core.ioc,
+          util = waspioc.core.util,
+          context = ioc.ServiceContext.getCurrentContext();
+
+      function UT_CreateAndDisposeContext() {
+        /* injected properties*/
+        this.logger = '';
+        this.context = '';
+
+        this.afterPropertiesSet = function() {
+          this.logger.log('Checking if logger was registered');
+          util.ParamChecker.assertNotNull(this.logger, 'logger');
+          this.logger.log('Checking if context was registered');
+          util.ParamChecker.assertNotNull(this.context, 'context');
+          this.logger.log('Checking if context is also the main context');
+          util.ParamChecker.assert(this.context === ioc.ServiceContext.getCurrentContext(), 'The context must be set');
+          util.ParamChecker.assert(this.context.getCurrentState() === ioc.ServiceContextState.STARTING, 'Expected context to be in STARTING state');
+        };
+
+        this.afterStarted = function() {
+          util.ParamChecker.assert(this.context.getCurrentState() === ioc.ServiceContextState.RUNNING, 'Expected context to be in RUNNING state');
+          var self = this;
+          setTimeout(function() {
+            self.logger.log('Disposing');
+            self.context.dispose();
+          }, 1000);
+        };
+
+        this.afterStopped = function() {
+          util.ParamChecker.assert(this.context.getCurrentState() === ioc.ServiceContextState.DISPOSED, 'Expected context to be in RUNNING state');
+          this.logger.log('Dispose completed');
+          var self = this;
+          this.logger.log('Asserting that context cannot be disposed twice');
+          util.ParamChecker.assertError(function() {
+            self.context.dispose();
+          }, 'Disposing context second time should have thrown an error!');
+        };
+      }
+
+      function TM_Context() {
+        this.getBeanTypes = function() {
+          return [ioc.BeanType.MODULE];
+        };
+
+        this.initializeContext = function(context) {
+          util.ParamChecker.assert(context.getCurrentState() === ioc.ServiceContextState.INIT, 'Expected context to be in INIT state');
+
+          UT_CreateAndDisposeContext.prototype.getBeanTypes = function() {
+            return [ioc.BeanType.INITIALIZING, ioc.BeanType.STARTING, ioc.BeanType.DISPOSING];
+          };
+
+          context.register('ContextChecker', UT_CreateAndDisposeContext);
+
+          context.registerProperty('logger', console);
+          context.registerProperty('context', context);
+        }
+      }
 
       function TestModule() {
         this.getBeanTypes = function() {
@@ -28,8 +84,6 @@
               bean.newValue = 'yeehaw';
               var bean2 = this.serviceContext.getItem('viewModel');
               this.logger.log('same bean names = same instance? ' + (bean === bean2 ? "yes": "no") );
-              // finished
-              this.serviceContext.dispose();
             };
           }
 
@@ -68,6 +122,7 @@
         }
       }
 
+      context.registerModule('testContextModule', new TM_Context());
       context.registerModule('screenModule', new TestModule());
       // start the context
       context.start();

@@ -18,6 +18,7 @@
     "files": [
         "./core/ioc/configurationItem.ts",
         "./core/ioc/serviceContext.ts",
-        "./core/models/treenode.ts"
+        "./core/models/treenode.ts",
+        "./core/util/paramchecker.ts"
     ]
 }

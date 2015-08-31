@@ -72,8 +72,8 @@ module waspioc.core.ioc {
    */
   export enum ServiceContextState {
     INIT,
+    STARTING,
     RUNNING,
-    STOPPED,
     DISPOSED,
     TERMINATED
   }
@@ -156,9 +156,9 @@ module waspioc.core.ioc {
      * @param matchingState: ServiceContextState the state the current context must have
      * @throws Error when current context state is different from the supplied state
      */
-    private ensureState(matchingState: ServiceContextState): void {
-      if (this.getCurrentState() !== matchingState) {
-        console.error('expected state to be ' + matchingState + ' and not ' + this.getCurrentState());
+    private ensureState(matchingState: ServiceContextState[]): void {
+      if (matchingState.indexOf(this.getCurrentState()) < 0) {
+        console.error('expected state to be [' + matchingState.join(', ') + '] and not ' + this.getCurrentState());
         throw { message: 'Wrong context state' };
       }
     }
@@ -171,7 +171,7 @@ module waspioc.core.ioc {
      * @requires ServiceContext.getCurrentState() must be ServiceContextState.INIT
      */
     register<T>(name: string, item: T): IConfigurationItem {
-      this.ensureState(ServiceContextState.INIT);
+      this.ensureState([ServiceContextState.INIT]);
       var configurationItem: IConfigurationItem = new ConfigurationItem(name, item, this, false);
       this.configurationDictionary[name] = configurationItem;
       return configurationItem;
@@ -185,7 +185,7 @@ module waspioc.core.ioc {
      * @requires ServiceContext.getCurrentState() must be ServiceContextState.INIT
      */
     registerInstance<T>(name: string, item: T): IConfigurationItem {
-      this.ensureState(ServiceContextState.INIT);
+      this.ensureState([ServiceContextState.INIT]);
       var configurationItem: IConfigurationItem = new ConfigurationItem(name, item, this, true);
       this.instanceDictionary[name] = configurationItem;
       return configurationItem;
@@ -200,7 +200,7 @@ module waspioc.core.ioc {
      * @requires ServiceContext.getCurrentState() must be ServiceContextState.INIT
      */
     registerProperty<T>(name: string, item: T): IConfigurationItem {
-      this.ensureState(ServiceContextState.INIT);
+      this.ensureState([ServiceContextState.INIT]);
       var configurationItem: IConfigurationItem = new ConfigurationItem(name, item, this, true);
       this.propertyDictionary[name] = configurationItem;
       return configurationItem;
@@ -214,7 +214,7 @@ module waspioc.core.ioc {
      * @requires ServiceContext.getCurrentState() must be ServiceContextState.INIT
      */
     registerModule(name: string, module: IModuleBean): void {
-      this.ensureState(ServiceContextState.INIT);
+      this.ensureState([ServiceContextState.INIT]);
       this.registerBean(name, module);
       this.moduleDictionary[name] = new ConfigurationItem(name, module, this, true);
     }
@@ -240,8 +240,8 @@ module waspioc.core.ioc {
         success = true;
       }
       if (this.lifeCycleDictionary.onDisposed[name] !== undefined) {
-        if (oldItem.onDisposed) {
-          oldItem.onDisposed();
+        if (oldItem.afterStopped) {
+          oldItem.afterStopped();
         }
       }
       oldItem = null;
@@ -253,6 +253,12 @@ module waspioc.core.ioc {
      * Disposes the current ServiceContext and calls the onDisposed method of all IDisposingBean's
      */
     dispose(): void {
+      this.ensureState([ServiceContextState.INIT, ServiceContextState.STARTING, ServiceContextState.RUNNING]);
+      for (var i = 0; i < this.lifeCycleDictionary.onDisposed.length; i++) {
+        this.remove(this.lifeCycleDictionary.onDisposed[i]);
+      }
+
+      this.state = ServiceContextState.DISPOSED;
       this.instanceDictionary = {};
       this.configurationDictionary = {};
       this.propertyDictionary = {};
@@ -264,7 +270,9 @@ module waspioc.core.ioc {
         onDisposed: new Array<string>()
       };
       this.moduleDictionary = {};
-      this.state = ServiceContextState.DISPOSED;
+      if (ServiceContext._currentContext === this) {
+        ServiceContext._currentContext = null;
+      }
     }
 
     /* @method getItem
@@ -274,7 +282,7 @@ module waspioc.core.ioc {
      * @requires ServiceContextState = RUNNING
      */
     getItem<T>(name: string): T {
-      this.ensureState(ServiceContextState.RUNNING);
+      this.ensureState([ServiceContextState.STARTING, ServiceContextState.RUNNING]);
       var item = this.instanceDictionary[name] || this.configurationDictionary[name] || null;
       if (!item) {
         throw new Error('No configuration found with name "' + name + '"');
@@ -318,41 +326,51 @@ module waspioc.core.ioc {
      * Initializes modules, then init beans and then starting beans, must be called before getItem can be called
      */
     start(): void {
-      var i: number, len: number, moduleName: string, module;
-      // setup the modules
-      for (i = 0, len = this.lifeCycleDictionary.modules.length; i < len; i++) {
-        moduleName = this.lifeCycleDictionary.modules[i];
-        module = this.moduleDictionary[moduleName].Value();
-        if (module && module.initializeContext) {
-          module.initializeContext(this);
+      try {
+        this.ensureState([ServiceContextState.INIT]);
+        var i: number, len: number, moduleName: string, module;
+        // setup the modules
+        for (i = 0, len = this.lifeCycleDictionary.modules.length; i < len; i++) {
+          moduleName = this.lifeCycleDictionary.modules[i];
+          module = this.moduleDictionary[moduleName].Value();
+          if (module && module.initializeContext) {
+            module.initializeContext(this);
+          }
         }
-      }
-      // from now on, we are in a "running state"
-      this.state = ServiceContextState.RUNNING;
+        // from now on, we are in a "running state"
+        this.state = ServiceContextState.STARTING;
 
-      // init all properties and register beans if necessary
-      this.registerDictionary(this.instanceDictionary);
-      this.registerDictionary(this.propertyDictionary);
-      this.registerDictionary(this.configurationDictionary);
+        // init all properties and register beans if necessary
+        this.registerDictionary(this.instanceDictionary);
+        this.registerDictionary(this.propertyDictionary);
+        this.registerDictionary(this.configurationDictionary);
 
-      // init all IInitBean's
-      for (i = 0, len = this.lifeCycleDictionary.onInit.length; i < len; i++) {
-        moduleName = this.lifeCycleDictionary.onInit[i];
-        module = this.getItem(moduleName);
-        if (module && module.afterPropertiesSet) {
-          module.afterPropertiesSet();
+        // init all IInitBean's
+        for (i = 0, len = this.lifeCycleDictionary.onInit.length; i < len; i++) {
+          moduleName = this.lifeCycleDictionary.onInit[i];
+          module = this.getItem(moduleName);
+          if (module && module.afterPropertiesSet) {
+            module.afterPropertiesSet();
+          }
         }
-      }
 
-      // now the context is fully up and running, activate all onstarted items
-      for (i = 0, len = this.lifeCycleDictionary.onStarted.length; i < len; i++) {
-        moduleName = this.lifeCycleDictionary.onStarted[i];
-        module = this.getItem(moduleName);
-        if (module && module.afterStarted) {
-          module.afterStarted();
+        this.state = ServiceContextState.RUNNING;
+
+        // now the context is fully up and running, activate all onstarted items
+        for (i = 0, len = this.lifeCycleDictionary.onStarted.length; i < len; i++) {
+          moduleName = this.lifeCycleDictionary.onStarted[i];
+          module = this.getItem(moduleName);
+          if (module && module.afterStarted) {
+            module.afterStarted();
+          }
         }
+        // context fully booted!
+      } catch (e) {
+        console.error(e);
+        this.state = ServiceContextState.TERMINATED;
+        // rethrow the error
+        throw e;
       }
-      // context fully booted!
     }
   }
 }

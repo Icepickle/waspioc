@@ -78,8 +78,8 @@ var waspioc;
             ioc.Bean = Bean;
             (function (ServiceContextState) {
                 ServiceContextState[ServiceContextState["INIT"] = 0] = "INIT";
-                ServiceContextState[ServiceContextState["RUNNING"] = 1] = "RUNNING";
-                ServiceContextState[ServiceContextState["STOPPED"] = 2] = "STOPPED";
+                ServiceContextState[ServiceContextState["STARTING"] = 1] = "STARTING";
+                ServiceContextState[ServiceContextState["RUNNING"] = 2] = "RUNNING";
                 ServiceContextState[ServiceContextState["DISPOSED"] = 3] = "DISPOSED";
                 ServiceContextState[ServiceContextState["TERMINATED"] = 4] = "TERMINATED";
             })(ioc.ServiceContextState || (ioc.ServiceContextState = {}));
@@ -123,31 +123,31 @@ var waspioc;
                     }
                 };
                 ServiceContext.prototype.ensureState = function (matchingState) {
-                    if (this.getCurrentState() !== matchingState) {
-                        console.error('expected state to be ' + matchingState + ' and not ' + this.getCurrentState());
+                    if (matchingState.indexOf(this.getCurrentState()) < 0) {
+                        console.error('expected state to be [' + matchingState.join(', ') + '] and not ' + this.getCurrentState());
                         throw { message: 'Wrong context state' };
                     }
                 };
                 ServiceContext.prototype.register = function (name, item) {
-                    this.ensureState(ServiceContextState.INIT);
+                    this.ensureState([ServiceContextState.INIT]);
                     var configurationItem = new ioc.ConfigurationItem(name, item, this, false);
                     this.configurationDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerInstance = function (name, item) {
-                    this.ensureState(ServiceContextState.INIT);
+                    this.ensureState([ServiceContextState.INIT]);
                     var configurationItem = new ioc.ConfigurationItem(name, item, this, true);
                     this.instanceDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerProperty = function (name, item) {
-                    this.ensureState(ServiceContextState.INIT);
+                    this.ensureState([ServiceContextState.INIT]);
                     var configurationItem = new ioc.ConfigurationItem(name, item, this, true);
                     this.propertyDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerModule = function (name, module) {
-                    this.ensureState(ServiceContextState.INIT);
+                    this.ensureState([ServiceContextState.INIT]);
                     this.registerBean(name, module);
                     this.moduleDictionary[name] = new ioc.ConfigurationItem(name, module, this, true);
                 };
@@ -167,14 +167,20 @@ var waspioc;
                         success = true;
                     }
                     if (this.lifeCycleDictionary.onDisposed[name] !== undefined) {
-                        if (oldItem.onDisposed) {
-                            oldItem.onDisposed();
+                        if (oldItem.afterStopped) {
+                            oldItem.afterStopped();
                         }
                     }
                     oldItem = null;
                     return success;
                 };
                 ServiceContext.prototype.dispose = function () {
+                    this.ensureState([ServiceContextState.INIT, ServiceContextState.STARTING, ServiceContextState.RUNNING]);
+                    debugger;
+                    for (var i = 0; i < this.lifeCycleDictionary.onDisposed.length; i++) {
+                        this.remove(this.lifeCycleDictionary.onDisposed[i]);
+                    }
+                    this.state = ServiceContextState.DISPOSED;
                     this.instanceDictionary = {};
                     this.configurationDictionary = {};
                     this.propertyDictionary = {};
@@ -186,10 +192,12 @@ var waspioc;
                         onDisposed: new Array()
                     };
                     this.moduleDictionary = {};
-                    this.state = ServiceContextState.DISPOSED;
+                    if (ServiceContext._currentContext === this) {
+                        ServiceContext._currentContext = null;
+                    }
                 };
                 ServiceContext.prototype.getItem = function (name) {
-                    this.ensureState(ServiceContextState.RUNNING);
+                    this.ensureState([ServiceContextState.STARTING, ServiceContextState.RUNNING]);
                     var item = this.instanceDictionary[name] || this.configurationDictionary[name] || null;
                     if (!item) {
                         throw new Error('No configuration found with name "' + name + '"');
@@ -218,31 +226,40 @@ var waspioc;
                     }
                 };
                 ServiceContext.prototype.start = function () {
-                    var i, len, moduleName, module;
-                    for (i = 0, len = this.lifeCycleDictionary.modules.length; i < len; i++) {
-                        moduleName = this.lifeCycleDictionary.modules[i];
-                        module = this.moduleDictionary[moduleName].Value();
-                        if (module && module.initializeContext) {
-                            module.initializeContext(this);
+                    try {
+                        this.ensureState([ServiceContextState.INIT]);
+                        var i, len, moduleName, module;
+                        for (i = 0, len = this.lifeCycleDictionary.modules.length; i < len; i++) {
+                            moduleName = this.lifeCycleDictionary.modules[i];
+                            module = this.moduleDictionary[moduleName].Value();
+                            if (module && module.initializeContext) {
+                                module.initializeContext(this);
+                            }
+                        }
+                        this.state = ServiceContextState.STARTING;
+                        this.registerDictionary(this.instanceDictionary);
+                        this.registerDictionary(this.propertyDictionary);
+                        this.registerDictionary(this.configurationDictionary);
+                        for (i = 0, len = this.lifeCycleDictionary.onInit.length; i < len; i++) {
+                            moduleName = this.lifeCycleDictionary.onInit[i];
+                            module = this.getItem(moduleName);
+                            if (module && module.afterPropertiesSet) {
+                                module.afterPropertiesSet();
+                            }
+                        }
+                        this.state = ServiceContextState.RUNNING;
+                        for (i = 0, len = this.lifeCycleDictionary.onStarted.length; i < len; i++) {
+                            moduleName = this.lifeCycleDictionary.onStarted[i];
+                            module = this.getItem(moduleName);
+                            if (module && module.afterStarted) {
+                                module.afterStarted();
+                            }
                         }
                     }
-                    this.state = ServiceContextState.RUNNING;
-                    this.registerDictionary(this.instanceDictionary);
-                    this.registerDictionary(this.propertyDictionary);
-                    this.registerDictionary(this.configurationDictionary);
-                    for (i = 0, len = this.lifeCycleDictionary.onInit.length; i < len; i++) {
-                        moduleName = this.lifeCycleDictionary.onInit[i];
-                        module = this.getItem(moduleName);
-                        if (module && module.afterPropertiesSet) {
-                            module.afterPropertiesSet();
-                        }
-                    }
-                    for (i = 0, len = this.lifeCycleDictionary.onStarted.length; i < len; i++) {
-                        moduleName = this.lifeCycleDictionary.onStarted[i];
-                        module = this.getItem(moduleName);
-                        if (module && module.afterStarted) {
-                            module.afterStarted();
-                        }
+                    catch (e) {
+                        console.error(e);
+                        this.state = ServiceContextState.TERMINATED;
+                        throw e;
                     }
                 };
                 ServiceContext._currentContext = null;
@@ -311,5 +328,54 @@ var waspioc;
             })();
             models.TreeNode = TreeNode;
         })(models = core.models || (core.models = {}));
+    })(core = waspioc.core || (waspioc.core = {}));
+})(waspioc || (waspioc = {}));
+var waspioc;
+(function (waspioc) {
+    var core;
+    (function (core) {
+        var util;
+        (function (util) {
+            var ParamChecker = (function () {
+                function ParamChecker() {
+                }
+                ParamChecker.assert = function (shouldBeTrue, message) {
+                    if (!shouldBeTrue) {
+                        throw new Error(message);
+                    }
+                };
+                ParamChecker.assertNotNull = function (value, name) {
+                    this.assert(value !== null && value !== void 0 && value && true, name + ' cannot be empty or undefined');
+                };
+                ParamChecker.assertTrue = function (value, name) {
+                    this.assert(value === true, name + ' should be exactly true');
+                };
+                ParamChecker.assertFalse = function (value, name) {
+                    this.assert(value === false || !value, name + ' should be exactly false');
+                };
+                ParamChecker.assertNoError = function (func, message) {
+                    var result = true;
+                    try {
+                        func();
+                    }
+                    catch (e) {
+                        result = false;
+                    }
+                    this.assert(result === false, message);
+                };
+                ParamChecker.assertError = function (func, message) {
+                    var result = true;
+                    try {
+                        func();
+                    }
+                    catch (e) {
+                        throw new Error(e.message + '\r\n' + message);
+                    }
+                    this.assert(result === true, message);
+                };
+                return ParamChecker;
+            })();
+            util.ParamChecker = ParamChecker;
+        })(util = core.util || (core.util = {}));
     })(core = waspioc.core || (waspioc.core = {}));
 })(waspioc || (waspioc = {}));
