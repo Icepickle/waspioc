@@ -117,6 +117,7 @@ module waspioc.core.ioc {
     private propertiesInitialized = {};
     private moduleDictionary = {};
     private state: ServiceContextState = ServiceContextState.INIT;
+    private _isDisposing: boolean = false;
 
     private lifeCycleDictionary = {
       modules: new Array<string>(),
@@ -227,6 +228,13 @@ module waspioc.core.ioc {
     remove(name: string): boolean {
       var success: boolean = false;
       var oldItem: any = this.getItem(name);
+      var oldIndex: number = -1;
+      if ((oldIndex = this.lifeCycleDictionary.onDisposed.indexOf(name)) >= 0) {
+        if (oldItem.afterStopped) {
+          oldItem.afterStopped();
+        }
+        this.lifeCycleDictionary.onDisposed.splice(oldIndex, 1);
+      }
       if (this.instanceDictionary[name] !== undefined) {
         delete this.instanceDictionary[name];
         success = true;
@@ -239,11 +247,6 @@ module waspioc.core.ioc {
         delete this.propertyDictionary[name];
         success = true;
       }
-      if (this.lifeCycleDictionary.onDisposed[name] !== undefined) {
-        if (oldItem.afterStopped) {
-          oldItem.afterStopped();
-        }
-      }
       oldItem = null;
 
       return success;
@@ -253,11 +256,14 @@ module waspioc.core.ioc {
      * Disposes the current ServiceContext and calls the onDisposed method of all IDisposingBean's
      */
     dispose(): void {
+      if (this._isDisposing) {
+        throw new Error('The context is already being disposed!');
+      }
+      this._isDisposing = true;
       this.ensureState([ServiceContextState.INIT, ServiceContextState.STARTING, ServiceContextState.RUNNING]);
       for (var i = 0; i < this.lifeCycleDictionary.onDisposed.length; i++) {
         this.remove(this.lifeCycleDictionary.onDisposed[i]);
       }
-
       this.state = ServiceContextState.DISPOSED;
       this.instanceDictionary = {};
       this.configurationDictionary = {};
@@ -273,6 +279,7 @@ module waspioc.core.ioc {
       if (ServiceContext._currentContext === this) {
         ServiceContext._currentContext = null;
       }
+      this._isDisposing = false;
     }
 
     /* @method getItem

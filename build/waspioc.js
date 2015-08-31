@@ -92,6 +92,7 @@ var waspioc;
                     this.propertiesInitialized = {};
                     this.moduleDictionary = {};
                     this.state = ServiceContextState.INIT;
+                    this._isDisposing = false;
                     this.lifeCycleDictionary = {
                         modules: new Array(),
                         onInit: new Array(),
@@ -154,6 +155,13 @@ var waspioc;
                 ServiceContext.prototype.remove = function (name) {
                     var success = false;
                     var oldItem = this.getItem(name);
+                    var oldIndex = -1;
+                    if ((oldIndex = this.lifeCycleDictionary.onDisposed.indexOf(name)) >= 0) {
+                        if (oldItem.afterStopped) {
+                            oldItem.afterStopped();
+                        }
+                        this.lifeCycleDictionary.onDisposed.splice(oldIndex, 1);
+                    }
                     if (this.instanceDictionary[name] !== undefined) {
                         delete this.instanceDictionary[name];
                         success = true;
@@ -166,17 +174,15 @@ var waspioc;
                         delete this.propertyDictionary[name];
                         success = true;
                     }
-                    if (this.lifeCycleDictionary.onDisposed[name] !== undefined) {
-                        if (oldItem.afterStopped) {
-                            oldItem.afterStopped();
-                        }
-                    }
                     oldItem = null;
                     return success;
                 };
                 ServiceContext.prototype.dispose = function () {
+                    if (this._isDisposing) {
+                        throw new Error('The context is already being disposed!');
+                    }
+                    this._isDisposing = true;
                     this.ensureState([ServiceContextState.INIT, ServiceContextState.STARTING, ServiceContextState.RUNNING]);
-                    debugger;
                     for (var i = 0; i < this.lifeCycleDictionary.onDisposed.length; i++) {
                         this.remove(this.lifeCycleDictionary.onDisposed[i]);
                     }
@@ -195,6 +201,7 @@ var waspioc;
                     if (ServiceContext._currentContext === this) {
                         ServiceContext._currentContext = null;
                     }
+                    this._isDisposing = false;
                 };
                 ServiceContext.prototype.getItem = function (name) {
                     this.ensureState([ServiceContextState.STARTING, ServiceContextState.RUNNING]);
@@ -353,7 +360,7 @@ var waspioc;
                 ParamChecker.assertFalse = function (value, name) {
                     this.assert(value === false || !value, name + ' should be exactly false');
                 };
-                ParamChecker.assertNoError = function (func, message) {
+                ParamChecker.assertError = function (func, message) {
                     var result = true;
                     try {
                         func();
@@ -363,7 +370,7 @@ var waspioc;
                     }
                     this.assert(result === false, message);
                 };
-                ParamChecker.assertError = function (func, message) {
+                ParamChecker.assertNoError = function (func, message) {
                     var result = true;
                     try {
                         func();

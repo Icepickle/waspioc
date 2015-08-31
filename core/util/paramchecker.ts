@@ -18,7 +18,7 @@ module waspioc.core.util {
       this.assert(value === false || !value, name + ' should be exactly false');
     }
 
-    static assertNoError(func: () => void, message: string) {
+    static assertError(func: () => void, message: string) {
       var result: boolean = true;
       try {
         func();
@@ -29,7 +29,7 @@ module waspioc.core.util {
       this.assert(result === false, message);
     }
 
-    static assertError(func: () => void, message: string) {
+    static assertNoError(func: () => void, message: string) {
       var result: boolean = true;
       try {
         func();
