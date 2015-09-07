@@ -16,9 +16,8 @@
         "!./node_modules/**/*.ts"
     ],
     "files": [
-        "./core/ioc/configurationItem.ts",
-        "./core/ioc/serviceContext.ts",
-        "./core/models/treenode.ts",
-        "./core/util/paramchecker.ts"
+        "./core/ioc.ts",
+        "./core/models.ts",
+        "./core/util.ts"
     ]
 }

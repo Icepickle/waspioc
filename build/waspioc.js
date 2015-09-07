@@ -4,61 +4,6 @@ var waspioc;
     (function (core) {
         var ioc;
         (function (ioc) {
-            var ConfigurationItem = (function () {
-                function ConfigurationItem(name, skeleton, serviceContext, isInstance) {
-                    if (serviceContext === void 0) { serviceContext = ioc.ServiceContext.getCurrentContext(); }
-                    if (isInstance === void 0) { isInstance = false; }
-                    this.name = name;
-                    this.skeleton = skeleton;
-                    this.serviceContext = serviceContext;
-                    this.isInstance = isInstance;
-                    this.referenceDictionary = {};
-                    this.valueDictionary = {};
-                }
-                ConfigurationItem.prototype.reference = function (property, configurationName) {
-                    this.referenceDictionary[property] = configurationName;
-                    return this;
-                };
-                ConfigurationItem.prototype.value = function (property, value) {
-                    this.valueDictionary[property] = value;
-                    return this;
-                };
-                ConfigurationItem.prototype.construct = function (arg) {
-                    this._constructorArguments = arg;
-                    return this;
-                };
-                ConfigurationItem.prototype.Value = function () {
-                    var item = this._value || (this.isInstance ? this.skeleton : new this.skeleton(this._constructorArguments));
-                    if (!this.isInstance || !this.isInitiated) {
-                        this._value = item;
-                        if (!this.isInitiated) {
-                            this.isInitiated = true;
-                            for (var value in this.referenceDictionary) {
-                                if (this.referenceDictionary.hasOwnProperty(value)) {
-                                    item[value] = this.serviceContext.getItem(this.referenceDictionary[value]);
-                                }
-                            }
-                            for (var value in this.valueDictionary) {
-                                if (this.valueDictionary.hasOwnProperty(value)) {
-                                    item[value] = this.valueDictionary[value];
-                                }
-                            }
-                        }
-                    }
-                    return item;
-                };
-                return ConfigurationItem;
-            })();
-            ioc.ConfigurationItem = ConfigurationItem;
-        })(ioc = core.ioc || (core.ioc = {}));
-    })(core = waspioc.core || (waspioc.core = {}));
-})(waspioc || (waspioc = {}));
-var waspioc;
-(function (waspioc) {
-    var core;
-    (function (core) {
-        var ioc;
-        (function (ioc) {
             (function (BeanType) {
                 BeanType[BeanType["MODULE"] = 0] = "MODULE";
                 BeanType[BeanType["INITIALIZING"] = 1] = "INITIALIZING";
@@ -66,6 +11,14 @@ var waspioc;
                 BeanType[BeanType["DISPOSING"] = 3] = "DISPOSING";
             })(ioc.BeanType || (ioc.BeanType = {}));
             var BeanType = ioc.BeanType;
+            (function (ServiceContextState) {
+                ServiceContextState[ServiceContextState["INIT"] = 0] = "INIT";
+                ServiceContextState[ServiceContextState["STARTING"] = 1] = "STARTING";
+                ServiceContextState[ServiceContextState["RUNNING"] = 2] = "RUNNING";
+                ServiceContextState[ServiceContextState["DISPOSED"] = 3] = "DISPOSED";
+                ServiceContextState[ServiceContextState["TERMINATED"] = 4] = "TERMINATED";
+            })(ioc.ServiceContextState || (ioc.ServiceContextState = {}));
+            var ServiceContextState = ioc.ServiceContextState;
             var Bean = (function () {
                 function Bean(beanTypes) {
                     this.beanTypes = beanTypes;
@@ -76,14 +29,6 @@ var waspioc;
                 return Bean;
             })();
             ioc.Bean = Bean;
-            (function (ServiceContextState) {
-                ServiceContextState[ServiceContextState["INIT"] = 0] = "INIT";
-                ServiceContextState[ServiceContextState["STARTING"] = 1] = "STARTING";
-                ServiceContextState[ServiceContextState["RUNNING"] = 2] = "RUNNING";
-                ServiceContextState[ServiceContextState["DISPOSED"] = 3] = "DISPOSED";
-                ServiceContextState[ServiceContextState["TERMINATED"] = 4] = "TERMINATED";
-            })(ioc.ServiceContextState || (ioc.ServiceContextState = {}));
-            var ServiceContextState = ioc.ServiceContextState;
             var ServiceContext = (function () {
                 function ServiceContext() {
                     this.configurationDictionary = {};
@@ -125,32 +70,31 @@ var waspioc;
                 };
                 ServiceContext.prototype.ensureState = function (matchingState) {
                     if (matchingState.indexOf(this.getCurrentState()) < 0) {
-                        console.error('expected state to be [' + matchingState.join(', ') + '] and not ' + this.getCurrentState());
                         throw { message: 'Wrong context state' };
                     }
                 };
                 ServiceContext.prototype.register = function (name, item) {
                     this.ensureState([ServiceContextState.INIT]);
-                    var configurationItem = new ioc.ConfigurationItem(name, item, this, false);
+                    var configurationItem = new ConfigurationItem(name, item, this, false);
                     this.configurationDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerInstance = function (name, item) {
                     this.ensureState([ServiceContextState.INIT]);
-                    var configurationItem = new ioc.ConfigurationItem(name, item, this, true);
+                    var configurationItem = new ConfigurationItem(name, item, this, true);
                     this.instanceDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerProperty = function (name, item) {
                     this.ensureState([ServiceContextState.INIT]);
-                    var configurationItem = new ioc.ConfigurationItem(name, item, this, true);
+                    var configurationItem = new ConfigurationItem(name, item, this, true);
                     this.propertyDictionary[name] = configurationItem;
                     return configurationItem;
                 };
                 ServiceContext.prototype.registerModule = function (name, module) {
                     this.ensureState([ServiceContextState.INIT]);
                     this.registerBean(name, module);
-                    this.moduleDictionary[name] = new ioc.ConfigurationItem(name, module, this, true);
+                    this.moduleDictionary[name] = new ConfigurationItem(name, module, this, true);
                 };
                 ServiceContext.prototype.remove = function (name) {
                     var success = false;
@@ -273,6 +217,52 @@ var waspioc;
                 return ServiceContext;
             })();
             ioc.ServiceContext = ServiceContext;
+            var ConfigurationItem = (function () {
+                function ConfigurationItem(name, skeleton, serviceContext, isInstance) {
+                    if (serviceContext === void 0) { serviceContext = ServiceContext.getCurrentContext(); }
+                    if (isInstance === void 0) { isInstance = false; }
+                    this.name = name;
+                    this.skeleton = skeleton;
+                    this.serviceContext = serviceContext;
+                    this.isInstance = isInstance;
+                    this.referenceDictionary = {};
+                    this.valueDictionary = {};
+                }
+                ConfigurationItem.prototype.reference = function (property, configurationName) {
+                    this.referenceDictionary[property] = configurationName;
+                    return this;
+                };
+                ConfigurationItem.prototype.value = function (property, value) {
+                    this.valueDictionary[property] = value;
+                    return this;
+                };
+                ConfigurationItem.prototype.construct = function (arg) {
+                    this._constructorArguments = arg;
+                    return this;
+                };
+                ConfigurationItem.prototype.Value = function () {
+                    var item = this._value || (this.isInstance ? this.skeleton : new this.skeleton(this._constructorArguments));
+                    if (!this.isInstance || !this.isInitiated) {
+                        this._value = item;
+                        if (!this.isInitiated) {
+                            this.isInitiated = true;
+                            for (var value in this.referenceDictionary) {
+                                if (this.referenceDictionary.hasOwnProperty(value)) {
+                                    item[value] = this.serviceContext.getItem(this.referenceDictionary[value]);
+                                }
+                            }
+                            for (var value in this.valueDictionary) {
+                                if (this.valueDictionary.hasOwnProperty(value)) {
+                                    item[value] = this.valueDictionary[value];
+                                }
+                            }
+                        }
+                    }
+                    return item;
+                };
+                return ConfigurationItem;
+            })();
+            ioc.ConfigurationItem = ConfigurationItem;
         })(ioc = core.ioc || (core.ioc = {}));
     })(core = waspioc.core || (waspioc.core = {}));
 })(waspioc || (waspioc = {}));
@@ -384,5 +374,66 @@ var waspioc;
             })();
             util.ParamChecker = ParamChecker;
         })(util = core.util || (core.util = {}));
+    })(core = waspioc.core || (waspioc.core = {}));
+})(waspioc || (waspioc = {}));
+var waspioc;
+(function (waspioc) {
+    var core;
+    (function (core) {
+        var models;
+        (function (models) {
+            var TreeNode = (function () {
+                function TreeNode(parent, children) {
+                    if (parent === void 0) { parent = null; }
+                    if (children === void 0) { children = []; }
+                    this.parent = parent;
+                    this.children = children;
+                }
+                TreeNode.prototype.isRoot = function () {
+                    return typeof this.parent === 'null';
+                };
+                TreeNode.prototype.getRoot = function () {
+                    if (this.isRoot()) {
+                        return this;
+                    }
+                    return this.parent.getRoot();
+                };
+                TreeNode.prototype.add = function (node) {
+                    node.parent = this;
+                    this.children.push(node);
+                };
+                TreeNode.prototype.remove = function (node) {
+                    var length = this.children.length, index;
+                    for (index = length; --index >= 0;) {
+                        if (this.children[index] === node) {
+                            break;
+                        }
+                    }
+                    if (index >= 0) {
+                        this.children[index].parent = null;
+                        this.children.splice(index, 1);
+                    }
+                };
+                TreeNode.prototype.find = function (evaluate) {
+                    var matchingNode = this.findAll(evaluate, 1);
+                    return matchingNode.length > 0 ? matchingNode[0] : null;
+                };
+                TreeNode.prototype.findAll = function (evaluate, maxNodes) {
+                    if (maxNodes === void 0) { maxNodes = 0; }
+                    var matchingNodes = [], index, length;
+                    for (index = 0, length = this.children.length; index < length; index++) {
+                        if (evaluate(this.children[index])) {
+                            matchingNodes.push(this.children[index]);
+                            if (maxNodes > 0 && matchingNodes.length >= maxNodes) {
+                                break;
+                            }
+                        }
+                    }
+                    return matchingNodes;
+                };
+                return TreeNode;
+            })();
+            models.TreeNode = TreeNode;
+        })(models = core.models || (core.models = {}));
     })(core = waspioc.core || (waspioc.core = {}));
 })(waspioc || (waspioc = {}));

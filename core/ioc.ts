@@ -1,5 +1,4 @@
 module waspioc.core.ioc {
-
   /* @enum BeanType
    * MODULE: Should be used to initialize the context, requires the IModuleBean implementation
    * INITIALIZING: Is called after all the modules were registered, and the contexts can be resolved, requires IInitBean implementation
@@ -11,6 +10,21 @@ module waspioc.core.ioc {
     INITIALIZING,
     STARTING,
     DISPOSING
+  }
+
+  /* @enum ServiceContextState
+   * INIT: initialization is done here, in this stage registration can be done
+   * RUNNING: modules are all registered, init beans have run, and starting beans were or are being called
+   * STOPPED: unused
+   * DISPOSED: The IContext got disposed, no more beans are known inside the IContext
+   * TERMINATED: An error occured during the Lifecycle of the IOC container, and the IContext was forcibly stopped, currently unused
+   */
+  export enum ServiceContextState {
+    INIT,
+    STARTING,
+    RUNNING,
+    DISPOSED,
+    TERMINATED
   }
 
   /* @interface IBean
@@ -63,19 +77,13 @@ module waspioc.core.ioc {
     afterStopped(): void;
   }
 
-  /* @enum ServiceContextState
-   * INIT: initialization is done here, in this stage registration can be done
-   * RUNNING: modules are all registered, init beans have run, and starting beans were or are being called
-   * STOPPED: unused
-   * DISPOSED: The IContext got disposed, no more beans are known inside the IContext
-   * TERMINATED: An error occured during the Lifecycle of the IOC container, and the IContext was forcibly stopped, currently unused
+  /* @interface IConfigurationItem
+   * Minimal interface that IConfigurationItem should support
    */
-  export enum ServiceContextState {
-    INIT,
-    STARTING,
-    RUNNING,
-    DISPOSED,
-    TERMINATED
+  export interface IConfigurationItem {
+      reference(property: string, configurationName: string): IConfigurationItem;
+      value<T>(property: string, value: T): IConfigurationItem;
+      construct(args: any[]): IConfigurationItem;
   }
 
   /* @interface IContext
@@ -159,7 +167,6 @@ module waspioc.core.ioc {
      */
     private ensureState(matchingState: ServiceContextState[]): void {
       if (matchingState.indexOf(this.getCurrentState()) < 0) {
-        console.error('expected state to be [' + matchingState.join(', ') + '] and not ' + this.getCurrentState());
         throw { message: 'Wrong context state' };
       }
     }
@@ -378,6 +385,84 @@ module waspioc.core.ioc {
         // rethrow the error
         throw e;
       }
+    }
+  }
+
+  /* @class ConfigurationItem
+   * Place holder for a configuration, can either contain an instance or a constructor that needs to be called
+   * Uses lazy initialization for the getting the Value
+   */
+  export class ConfigurationItem implements IConfigurationItem {
+    private isInitiated;
+    private referenceDictionary = {};
+    private valueDictionary = {};
+    private _value: any;
+    private _constructorArguments: any;
+
+    /* @constructor
+     * @param name: String the name of the configuration in the context
+     * @param skeleton: Object The instance or the class that needs to be constructed
+     * @param serviceContext: IContext the context that manages this configuration item
+     * @param isInstance: boolean Inidcates if the skeleton should be returned, or if the Value has to be initiated during the first initialization
+     */
+    constructor(public name: string, protected skeleton: any, protected serviceContext: IContext = ServiceContext.getCurrentContext(), protected isInstance: boolean = false) {
+      // intended blank
+    }
+
+    /* @method reference
+     * @param property: string the name of the property in your class that you wish to add a reference for
+     * @param configurationName: string the reference to another item registered in the serviceContext
+     * @returns this
+     */
+    public reference(property: string, configurationName: string): IConfigurationItem {
+      this.referenceDictionary[property] = configurationName;
+      return this;
+    }
+
+    /* @method value<T>
+     * @param property: string the name of the property in your class that you wish to add a reference for
+     * @param value: T The raw value that you wish to set to this property
+     * @returns this
+     */
+    public value<T>(property: string, value: T): IConfigurationItem {
+      this.valueDictionary[property] = value;
+      return this;
+    }
+
+    /* @method construct
+     * @param arg: Object a constructor parameter to use when calling this class
+     * @returns this
+     */
+    public construct(arg: any): IConfigurationItem {
+      this._constructorArguments = arg;
+      return this;
+    }
+
+    /* @method Value
+     * returns a fully usable
+     * @returns Object
+     */
+    public Value(): any {
+      var item: any = this._value || (this.isInstance ? this.skeleton : new this.skeleton(this._constructorArguments));
+
+      if (!this.isInstance || !this.isInitiated) {
+        this._value = item;
+        if (!this.isInitiated) {
+          this.isInitiated = true;
+          for (var value in this.referenceDictionary) {
+            if (this.referenceDictionary.hasOwnProperty(value)) {
+              item[value] = this.serviceContext.getItem(this.referenceDictionary[value]);
+            }
+          }
+          for (var value in this.valueDictionary) {
+            if (this.valueDictionary.hasOwnProperty(value)) {
+              item[value] = this.valueDictionary[value];
+            }
+          }
+        }
+      }
+
+      return item;
     }
   }
 }
